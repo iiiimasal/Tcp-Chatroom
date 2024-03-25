@@ -58,7 +58,8 @@ def handle_connection(conn, addr):
                     # print("nickname",nickname)
                     nicknames[conn] = nickname
 
-
+                    # print(clients_list)
+                    # print("ni",nicknames)
                     welcome_message = f"Welcome {nickname} to the chatroom!"
                     conn.sendall(welcome_message.encode())
 
@@ -80,6 +81,11 @@ def handle_chatroom_connection(conn, addr):
             if not data:
                 break 
             print("Received message:", data.decode())
+            received_data=data.decode().strip().lower()
+            if received_data == "please send the list of attendees":
+                request_attendees(conn)
+
+
             sender_nickname = nicknames[conn]
              # Get the current time
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -94,6 +100,11 @@ def handle_chatroom_connection(conn, addr):
     finally:
         remove(conn)
         print("Connection closed by:", addr)
+
+def request_attendees(conn):
+    attendees = ", ".join(nicknames.values())
+    response = f"Here is the list of attendees:\r\n{attendees}\r\n"
+    conn.sendall(response.encode())
 
 def broadcast(message, sender_conn):
     sender_nickname = nicknames[sender_conn]
