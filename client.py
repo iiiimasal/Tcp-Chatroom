@@ -63,13 +63,18 @@ def send_messages(conn):
     while True:
         try:
             # Prompt for user input and send messages to the server
-            message = input("[You]: ")
-            conn.sendall(message.encode())
+            message = input("")
+            new_form=message_format(message)
+            conn.sendall(new_form.encode())
             if message.lower() == 'exit':
                 break
         except Exception as e:
             print("An error occurred while sending messages:", e)
             break
+def message_format(message):
+    length=len(message).to_bytes()
+    new_format=f"Public message,{length}\\r\\n\r\n{message}\\r\\n"
+    return new_format
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
     c.connect((HOST, PORT))

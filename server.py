@@ -13,6 +13,8 @@ def user_registration(conn, login_data):
         file.write(f"{username}:{password}\n")
     conn.sendall(b"Registered successfully.")
 
+logged_in = []
+
 def user_login(conn, login_data):
     print("Received login data:", login_data)
     username = login_data
@@ -23,8 +25,13 @@ def user_login(conn, login_data):
             if len(stored_data) == 2:
                 stored_username, stored_password = stored_data
                 if stored_username == username:
-                    return "Login successful."
+                    if username not in logged_in:  # Check if the user is not already logged in
+                        logged_in.append(username)
+                        print(logged_in)
+                        return "Login successful."
+                    return "You are already logged in with another client service."
     return "Invalid username or password."
+
 
 def handle_connection(conn, addr):
     print("Connected by:", addr)
@@ -80,30 +87,52 @@ def handle_chatroom_connection(conn, addr):
             data = conn.recv(1024)
             if not data:
                 break 
+            # the data which is sent to server in specific form
             print("Received message:", data.decode())
-            received_data=data.decode().strip().lower()
-            if received_data == "please send the list of attendees":
+            received_data = data.decode().strip().lower()
+            # extercat the message body including "\r\n" 
+            raw_data = message_format(received_data)
+            line = raw_data[1]
+            
+            
+            message_to_brodcast = line  # Define message_to_brodcast outside the if-else block
+            # removing "\r\n" and exteract the main message body
+            if line.endswith("\r\n"):
+                print("yes")
+                message_to_brodcast = line[:-2]  # Modify message_to_brodcast if the condition is satisfied
+                
+            print("Value of message_to_brodcast:", message_to_brodcast)
+            if message_to_brodcast.strip() == "please send the list of attendees":
+                print("yes")
                 request_attendees(conn)
 
 
             sender_nickname = nicknames[conn]
-             # Get the current time
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # Write the message along with the time to the chat history file
             with open('chat_history.txt', 'a') as file:
-                file.write(f"{current_time} - {sender_nickname}: {data.decode()}\n")
-                            # file.write(f"{addr[0]}: {message}\n")
-            broadcast(data, conn)
+                file.write(f"{current_time} - {sender_nickname}: {message_to_brodcast}\n")
+                            
+            broadcast(message_to_brodcast, conn)
     except Exception as e:
         print("Error handling client connection:", e)
     finally:
         remove(conn)
         print("Connection closed by:", addr)
 
+
+
+def message_format(data):
+    raw_data = data.split("\\r\\n")
+    formatted_data=[]
+    for word in raw_data:
+        formatted_data.append(word)
+    return formatted_data
+    
+
 def request_attendees(conn):
     attendees = ", ".join(nicknames.values())
-    response = f"Here is the list of attendees:\r\n{attendees}\r\n"
+    response = f"Here is the list of attendees:\\r\\n\r\n{attendees}\\r\\n"
     conn.sendall(response.encode())
 
 def broadcast(message, sender_conn):
@@ -112,7 +141,7 @@ def broadcast(message, sender_conn):
         if client_conn != sender_conn:
             # print("Broadcasting message:", message.decode(), "to", client_conn)
             try:
-                data=f"{sender_nickname}: {message.decode()}".encode()
+                data=f"{sender_nickname}: {message}".encode()
                 client_conn.send(data)
 
 
