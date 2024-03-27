@@ -70,7 +70,7 @@ def handle_connection(conn, addr):
                     welcome_message = f"Welcome {nickname} to the chatroom!"
                     conn.sendall(welcome_message.encode())
 
-                    broadcast(f"{nickname} has joined the chatroom!".encode(), conn)
+                    joining(f"{nickname} has joined the chatroom!".encode(), conn)
                     handle_chatroom_connection(conn, addr)
                 else:
                     print("Client did not send 'Hello'")
@@ -91,9 +91,10 @@ def handle_chatroom_connection(conn, addr):
             print("Received message:", data.decode())
             received_data = data.decode().strip().lower()
             # extercat the message body including "\r\n" 
-            raw_data = message_format(received_data)
-            line = raw_data[1]
+            raw_data,length = message_format(received_data)
             
+            line = raw_data[1]
+            print("showing the length",raw_data[0])
             
             message_to_brodcast = line  # Define message_to_brodcast outside the if-else block
             # removing "\r\n" and exteract the main message body
@@ -113,7 +114,7 @@ def handle_chatroom_connection(conn, addr):
             with open('chat_history.txt', 'a') as file:
                 file.write(f"{current_time} - {sender_nickname}: {message_to_brodcast}\n")
                             
-            broadcast(message_to_brodcast, conn)
+            broadcast(message_to_brodcast,length, conn)
     except Exception as e:
         print("Error handling client connection:", e)
     finally:
@@ -123,11 +124,13 @@ def handle_chatroom_connection(conn, addr):
 
 
 def message_format(data):
-    raw_data = data.split("\\r\\n")
+    raw_data = data.split("\r\n")
+    first_line=raw_data[0].split(",")
+    length=first_line[1]
     formatted_data=[]
     for word in raw_data:
         formatted_data.append(word)
-    return formatted_data
+    return formatted_data,length
     
 
 def request_attendees(conn):
@@ -135,19 +138,28 @@ def request_attendees(conn):
     response = f"Here is the list of attendees:\\r\\n\r\n{attendees}\\r\\n"
     conn.sendall(response.encode())
 
-def broadcast(message, sender_conn):
+def broadcast(message,length ,sender_conn):
     sender_nickname = nicknames[sender_conn]
     for client_conn in clients_list:
-        if client_conn != sender_conn:
+        # if client_conn != sender_conn:
             # print("Broadcasting message:", message.decode(), "to", client_conn)
             try:
-                data=f"{sender_nickname}: {message}".encode()
+                data=f"Public message from {sender_nickname},{length}:\r\n {message}\r\n".encode()
                 client_conn.send(data)
 
 
             except Exception as e:
                 print("Error broadcasting message:", e)
 
+def joining(message, sender_conn):
+    sender_nickname = nicknames[sender_conn]
+    for client_conn in clients_list:
+        if client_conn != sender_conn:
+            try:
+                # Send the message as a string without the byte prefix
+                client_conn.sendall(message)
+            except Exception as e:
+                print("Error broadcasting message:", e)
 
 
 
