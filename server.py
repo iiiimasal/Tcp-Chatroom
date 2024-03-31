@@ -32,7 +32,6 @@ def user_login(conn, login_data):
                     return "You are already logged in with another client service."
     return "Invalid username or password."
 
-
 def handle_connection(conn, addr):
     print("Connected by:", addr)
     while True:
@@ -58,28 +57,27 @@ def handle_connection(conn, addr):
                 hello_message = conn.recv(1024).decode().strip().lower()  # Convert to lowercase and strip whitespace
                 print("Received message from client:", hello_message)
                 if hello_message == "hello":
-                    
                     clients_list.append(conn)
-                   
+                    # print("this is client lis",clients_list)
                     nickname = login_data
-                    # print("nickname",nickname)
                     nicknames[conn] = nickname
-
-                    # print(clients_list)
-                    # print("ni",nicknames)
+                    # print("this is nicknames lis",nicknames)
                     welcome_message = f"Welcome {nickname} to the chatroom!"
                     conn.sendall(welcome_message.encode())
-
-                    joining(f"{nickname} has joined the chatroom!".encode(), conn)
-                    handle_chatroom_connection(conn, addr)
+                    joining_leaving(f"{nickname} has joined the chatroom!".encode(), conn)
+                    r=handle_chatroom_connection(conn, addr)  # Handle chatroom connection here
+                    if r=="Goodbye.You are not allowed in the chatroom anymore":
+                        break
                 else:
                     print("Client did not send 'Hello'")
         else:
-            conn.sendall(b"Invalid request.")
+            conn.sendall(b"no connection")
 
     print("Connection closed by:", addr)
-    remove(conn)
     conn.close()
+    remove(conn)
+
+
 
 def handle_chatroom_connection(conn, addr): 
     try:
@@ -87,39 +85,72 @@ def handle_chatroom_connection(conn, addr):
             data = conn.recv(1024)
             if not data:
                 break 
-            # the data which is sent to server in specific form
-            print("Received message:", data.decode())
-            received_data = data.decode().strip().lower()
-            # extercat the message body including "\r\n" 
-            raw_data,length = message_format(received_data)
             
-            line = raw_data[1]
-            print("showing the length",raw_data[0])
-            
-            message_to_brodcast = line  # Define message_to_brodcast outside the if-else block
-            # removing "\r\n" and exteract the main message body
-            if line.endswith("\r\n"):
+            segments = data.decode().split(",")
+            message_type = segments[0].strip().lower()
+            # if message_type.startswith("public"):
+            #     handle_public_message(segments[1], conn)
+            if message_type.startswith("private"):
                 print("yes")
-                message_to_brodcast = line[:-2]  # Modify message_to_brodcast if the condition is satisfied
+                print(type(data.decode()))
+                length, receiver_list, message_body=extract_private_message(data=data)
+                print(length," ",receiver_list,message_body)
+                handle_private_message(length,message_body,receiver_list,conn)
+            else:
+                # the data which is sent to server in specific form
+                print("Received message:", data.decode())
+                received_data = data.decode().strip().lower()
                 
-            print("Value of message_to_brodcast:", message_to_brodcast)
-            if message_to_brodcast.strip() == "please send the list of attendees":
-                print("yes")
-                request_attendees(conn)
-
-
-            sender_nickname = nicknames[conn]
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # extercat the message body including "\r\n" 
+                raw_data,length = message_format(received_data)
+                
+                line = raw_data[1]
+                
+                
+                message_to_brodcast = line  # Define message_to_brodcast outside the if-else block
+                # removing "\r\n" and exteract the main message body
             
-            with open('chat_history.txt', 'a') as file:
-                file.write(f"{current_time} - {sender_nickname}: {message_to_brodcast}\n")
-                            
-            broadcast(message_to_brodcast,length, conn)
+                    
+                
+                if message_to_brodcast.strip() == "please send the list of attendees":
+                    print("yes")
+                    request_attendees(conn)
+
+                elif message_to_brodcast.strip()=="bye":
+                    conn.sendall(b'Goodbye.You are not allowed in the chatroom anymore')
+                   
+                    return 'Goodbye.You are not allowed in the chatroom anymore'
+                    
+                else:
+                      
+                    sender_nickname = nicknames[conn]
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    broadcast(message_to_brodcast,length, conn)  
+                with open('chat_history.txt', 'a') as file:
+                    file.write(f"{current_time} - {sender_nickname}: {message_to_brodcast}\n")
+    
     except Exception as e:
         print("Error handling client connection:", e)
-    finally:
-        remove(conn)
-        print("Connection closed by:", addr)
+    # finally:
+    #     remove(conn)
+    #     print("Connection closed by:", addr)
+
+def handle_private_message(length, message_body, receivers_list, sender_conn):
+    try:
+        sender_nickname = nicknames[sender_conn]
+        
+        for client_conn in clients_list:
+            nickname = nicknames.get(client_conn)  # Retrieve nickname for the current client_conn
+            for reciver in receivers_list:
+                try:
+                    if reciver==nickname:
+                        # Construct message format for each recipient
+                        new_format = f"Private message,{length} from {sender_nickname} to {nickname}\r\n{message_body}"
+                        client_conn.sendall(new_format.encode())
+                except Exception as e:
+                    print(f"Error sending message to {nickname}: {e}")
+    except Exception as e:
+        print("Error handling private message:", e)
 
 
 
@@ -151,7 +182,7 @@ def broadcast(message,length ,sender_conn):
             except Exception as e:
                 print("Error broadcasting message:", e)
 
-def joining(message, sender_conn):
+def joining_leaving(message, sender_conn):
     sender_nickname = nicknames[sender_conn]
     for client_conn in clients_list:
         if client_conn != sender_conn:
@@ -161,17 +192,43 @@ def joining(message, sender_conn):
             except Exception as e:
                 print("Error broadcasting message:", e)
 
+def extract_private_message(data):
+    data_str = data.decode()
+    # Split the data by "\r\n" to separate the message header and body
+    # print(data_str)
+    header, body = data_str.split("\r\n")
+    # print("header:",header)
+    
+    # Split the header by "to" to extract the recivers
+    segments = header.split("to")
+    # print(segments)
+    # Extract the length of the message
+    length = segments[0].split(",")[1].strip()
+    # print(length)
+    # Extract the receivers
+    receiver_list = [receiver.strip() for receiver in segments[1].split(",")]
 
+    # print(receiver_list)
+    
+    # Extract the message body
+    message_body = body.strip()
+    
+    return length, receiver_list, message_body
 
 
 
 
 def remove(conn): 
     if conn in clients_list: 
+        nickname = nicknames[conn]  # Retrieve nickname before removing conn
         clients_list.remove(conn)
-        nickname = nicknames[conn]
+        logged_in.remove(nickname)
+        joining_leaving(f"{nickname} has left the chat.".encode(), conn)  # Pass conn instead of sender_conn
         del nicknames[conn]
-        broadcast(f"{nickname} has left the chat.".encode(), conn)
+        # conn.close()  # Close the connection
+
+
+
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
     server.bind((HOST, PORT))

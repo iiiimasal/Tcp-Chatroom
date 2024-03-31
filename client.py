@@ -64,17 +64,18 @@ def send_messages(conn):
         try:
             # Prompt for user input and send messages to the server
             message = input("")
-            if message.lower().split(",")[0].startswith("private"):
+            if message.lower().startswith("private"):  # Corrected condition
                 new_form = private_message_format(message)
                 print(new_form)
             else:
-                new_form=public_message_format(message)
+                new_form = public_message_format(message)
             conn.sendall(new_form.encode())
             if message.lower() == 'exit':
                 break
         except Exception as e:
             print("An error occurred while sending messages:", e)
             break
+
 def public_message_format(message):
     length=len(message).to_bytes()
     new_format=f"Public message,{length}\r\n{message}\r\n"
@@ -86,11 +87,12 @@ def private_message_format(message):
 
     body = segments[1]
     # Calculate the length of the body in bytes
-    length = len(body)
+    length = len(body).to_bytes()
     # Convert the length to bytes using big-endian encoding
-    length_bytes = length.to_bytes(2, byteorder='big')
+    # length_bytes = length.to_bytes(2, byteorder='big')
     
-    new_format = f"Private message,{length_bytes.decode()} to {', '.join(receivers)}\r\n{body} "
+    new_format = f"Private message,{length} to {', '.join(receivers)}\r\n{body} "
+    
     return new_format
 
 
