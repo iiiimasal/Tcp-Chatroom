@@ -1,6 +1,15 @@
 import socket
 import threading
 import datetime
+import os
+from Crypto.Random import get_random_bytes
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad,unpad
+
+
+
+
 HOST = "127.0.0.1"
 PORT = 8020
 clients_list = []
@@ -27,10 +36,33 @@ def user_login(conn, login_data):
                 if stored_username == username:
                     if username not in logged_in:  # Check if the user is not already logged in
                         logged_in.append(username)
+                        # generating the key and send it to client
+                        uniuqe_key=generating_key(stored_password)
+                        print(uniuqe_key)
+                        conn.sendall(uniuqe_key)
                         print(logged_in)
                         return "Login successful."
                     return "You are already logged in with another client service."
     return "Invalid username or password."
+
+def generating_key(client_password):
+    simple_key=get_random_bytes(32)
+    key=PBKDF2(client_password,simple_key)
+    return key
+
+def encrypt_AES(message, key):
+    cipher = AES.new(key, AES.MODE_CBC)
+    padded_message = pad(message.encode(), AES.block_size)
+    encrypted_message = cipher.encrypt(padded_message)
+    return encrypted_message
+
+
+def decrypt_AES(encrypted_message, key):
+    cipher = AES.new(key, AES.MODE_CBC)
+    decrypted_message = cipher.decrypt(encrypted_message)
+    unpadded_message = unpad(decrypted_message, AES.block_size)
+    return unpadded_message.decode()
+
 
 def handle_connection(conn, addr):
     print("Connected by:", addr)
@@ -96,6 +128,13 @@ def handle_chatroom_connection(conn, addr):
                 length, receiver_list, message_body=extract_private_message(data=data)
                 print(length," ",receiver_list,message_body)
                 handle_private_message(length,message_body,receiver_list,conn)
+            elif message_type.startswith("file"):  # Handle file transfer
+                print("yes")
+                print(segments)
+                file_name, file_size = segments[0].split(":")[1], int(segments[0].split(":")[2])
+                print(file_name,file_size)
+                receive_file(conn, file_name, file_size) 
+
             else:
                 # the data which is sent to server in specific form
                 print("Received message:", data.decode())
@@ -125,6 +164,7 @@ def handle_chatroom_connection(conn, addr):
                       
                     sender_nickname = nicknames[conn]
                     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # encrypted_message = encrypt_AES(message_to_brodcast, key)
                     broadcast(message_to_brodcast,length, conn)  
                 with open('chat_history.txt', 'a') as file:
                     file.write(f"{current_time} - {sender_nickname}: {message_to_brodcast}\n")
@@ -215,8 +255,42 @@ def extract_private_message(data):
     
     return length, receiver_list, message_body
 
+def receive_file(conn, file_name, file_size):
+    received_size = 0
+    with open(file_name, "wb") as f:
+        while received_size < file_size:
+            data = conn.recv(1024)
+            f.write(data)
+            received_size += len(data)
+    print(f"File '{file_name}' received successfully.")
+    inform_users(conn, file_name)
 
+def inform_users(sender_conn, file_name):
+    sender_nickname = nicknames[sender_conn]
+    message = f"{sender_nickname} has sent a file: {file_name}."
+    for client_conn in clients_list:
+        if client_conn != sender_conn:
+            try:
+                client_conn.sendall(message.encode())
+               
+                print("hh")
+                send_file(client_conn, file_name)
+            except Exception as e:
+                print("Error informing user:", e)
 
+def send_file(conn, file_path):
+    if os.path.exists(file_path):
+        file_size = os.path.getsize(file_path)
+        conn.sendall(f"file:{os.path.basename(file_path)}:{file_size}".encode())
+        with open(file_path, "rb") as file:
+            while True:
+                data = file.read(1024)
+                if not data:
+                    break
+                conn.sendall(data)
+        print(f"File '{file_path}' sent successfully.")
+    else:
+        print(f"File '{file_path}' does not exist.")
 
 def remove(conn): 
     if conn in clients_list: 

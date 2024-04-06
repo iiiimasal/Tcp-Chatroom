@@ -1,6 +1,6 @@
 import socket
 import threading
-
+import os
 HOST = "127.0.0.1"
 PORT = 8020
 
@@ -40,6 +40,11 @@ def create_user(conn):
         print("Invalid choice. Please enter 'yes' or 'no'.")
         return create_user(conn)
 
+def receive_key(conn):
+    key = conn.recv(32)
+    return key
+
+
 
 def hello_message():
     choice = input("Enter 'Hello' if you want to join the chatroom: ")
@@ -49,15 +54,36 @@ def hello_message():
         return None
 
 def receive_messages(conn):
+    save_directory = os.getcwd()
+    print(save_directory)
     while True:
         try:
             # Receive messages from the server
             data = conn.recv(1024).decode()
             if data:
                 print("[Server]:", data)
+                if "has sent a file" in data:
+                    file_info = data.split(":")
+                    file_name = file_info[1]
+                    file_size = int(file_info[2])
+                    receive_file(conn, file_name, file_size, save_directory)
         except Exception as e:
             print("An error occurred while receiving messages:", e)
             break
+
+def receive_file(conn, file_name, file_size, save_directory):
+    try:
+        file_path = os.path.join(save_directory, file_name)
+        with open(file_path, "wb") as file:
+            received_size = 0
+            while received_size < file_size:
+                data = conn.recv(1024)
+                file.write(data)
+                received_size += len(data)
+            print(f"File '{file_path}' received successfully.")
+    except Exception as e:
+        print(f"An error occurred while receiving the file '{file_name}':", e)
+
 
 def send_messages(conn):
     while True:
@@ -67,6 +93,12 @@ def send_messages(conn):
             if message.lower().startswith("private"):  # Corrected condition
                 new_form = private_message_format(message)
                 print(new_form)
+
+            elif message.lower().startswith("file"):  # Send file if message starts with "file"
+                file_path = message.split(",", 1)[1].strip()
+                new_form=public_message_format(message)
+                send_file(conn, file_path)
+
             else:
                 new_form = public_message_format(message)
             conn.sendall(new_form.encode())
@@ -75,6 +107,26 @@ def send_messages(conn):
         except Exception as e:
             print("An error occurred while sending messages:", e)
             break
+
+
+def send_file(conn, file_path):
+    if os.path.isfile(file_path):
+        # Send file name and size
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        conn.sendall(f"file:{file_name}:{file_size}".encode())
+
+        # Send file content
+        with open(file_path, "rb") as f:
+            while True:
+                data = f.read(1024)
+                if not data:
+                    break
+                conn.sendall(data)
+        print(f"File '{file_name}' sent successfully.")
+    else:
+        print("File not found.")
+
 
 def public_message_format(message):
     length=len(message).to_bytes()
@@ -108,7 +160,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
     if command == "login":
         # No password is sent for login, so received_data contains only the username
         username = received_data
+        key = receive_key(c)
         print(f"Login successful for: {username}")
+        print("Received key:", key)
+
     else:
         # For registration, split received_data into username and password
         username, password = received_data.split(":")
