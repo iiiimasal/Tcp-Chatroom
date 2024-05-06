@@ -11,7 +11,7 @@ from Crypto.Util.Padding import pad,unpad
 
 
 HOST = "127.0.0.1"
-PORT = 8020
+PORT = 15000
 clients_list = []
 nicknames = {}
 
@@ -26,14 +26,15 @@ logged_in = []
 
 def user_login(conn, login_data):
     print("Received login data:", login_data)
-    username = login_data
+    username,password = login_data.split(":")
     print(username)
     with open("login_history.txt", "r") as f:
         for line in f:
             stored_data = line.strip().split(":")
             if len(stored_data) == 2:
                 stored_username, stored_password = stored_data
-                if stored_username == username:
+                if stored_username == username and stored_password == password:
+                    
                     if username not in logged_in:  # Check if the user is not already logged in
                         logged_in.append(username)
                         # generating the key and send it to client
@@ -43,7 +44,7 @@ def user_login(conn, login_data):
                         print(logged_in)
                         return "Login successful."
                     return "You are already logged in with another client service."
-    return "Invalid username or password."
+                return "Invalid username or password."
 
 def generating_key(client_password):
     simple_key=get_random_bytes(32)
@@ -206,7 +207,7 @@ def message_format(data):
 
 def request_attendees(conn):
     attendees = ", ".join(nicknames.values())
-    response = f"Here is the list of attendees:\\r\\n\r\n{attendees}\\r\\n"
+    response = f"Here is the list of attendees:\r\n{attendees}\r\n"
     conn.sendall(response.encode())
 
 def broadcast(message,length ,sender_conn):
@@ -273,7 +274,7 @@ def inform_users(sender_conn, file_name):
             try:
                 client_conn.sendall(message.encode())
                
-                print("hh")
+                
                 send_file(client_conn, file_name)
             except Exception as e:
                 print("Error informing user:", e)
@@ -299,7 +300,7 @@ def remove(conn):
         logged_in.remove(nickname)
         joining_leaving(f"{nickname} has left the chat.".encode(), conn)  # Pass conn instead of sender_conn
         del nicknames[conn]
-        # conn.close()  # Close the connection
+        
 
 
 

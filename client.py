@@ -2,7 +2,7 @@ import socket
 import threading
 import os
 HOST = "127.0.0.1"
-PORT = 8020
+PORT = 15000
 
 def create_user(conn):
     print("Do you have an account? (yes/no)")
@@ -27,10 +27,10 @@ def create_user(conn):
         
     elif choice.lower() == "yes":
         print("Please login into your account.")
-        username = input("Enter a username: ")
-
+        username = input("Enter a username : ")
+        password = input("Enter your password :")
         # Encode the message as bytes before sending
-        message = f"login:{username}"
+        message = f"login:{username}:{password}"
         conn.sendall(message.encode())  # Indicate login with "login"
         
         # Return the login data
@@ -55,7 +55,7 @@ def hello_message():
 
 def receive_messages(conn):
     save_directory = os.getcwd()
-    print(save_directory)
+    
     while True:
         try:
             # Receive messages from the server
