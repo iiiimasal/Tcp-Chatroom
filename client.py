@@ -55,7 +55,7 @@ def hello_message():
 
 def receive_messages(conn):
     save_directory = os.getcwd()
-    print(save_directory)
+    # print(save_directory)
     while True:
         try:
             # Receive messages from the server

@@ -123,8 +123,6 @@ def handle_chatroom_connection(conn, addr):
             # if message_type.startswith("public"):
             #     handle_public_message(segments[1], conn)
             if message_type.startswith("private"):
-                print("yes")
-                print(type(data.decode()))
                 length, receiver_list, message_body=extract_private_message(data=data)
                 print(length," ",receiver_list,message_body)
                 handle_private_message(length,message_body,receiver_list,conn)
